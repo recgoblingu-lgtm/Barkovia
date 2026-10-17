@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#b08462">
+  <meta name="description" content="An independently hosted browser copy of the January 2017 Rec Room build.">
+  <title>Barkquiem</title>
+  <link rel="icon" type="image/png" href="TemplateData/vanilla-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Roboto, sans-serif; background: #54789a url('TemplateData/barkquiem-background.jpg') center / cover no-repeat fixed; color: #e0e0e0; min-height: 100vh; display: flex; }
+    .stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .game { width: min(calc(100vw - 32px), calc((100vh - 80px) * 1.6)); border-radius: 8px; overflow: hidden; background: #1e1e1e; box-shadow: 0 10px 40px rgba(0,0,0,.45); }
+    .game-view { position: relative; aspect-ratio: 16 / 10; background: #121212; }
+    #gameContainer, #gameContainer canvas { width: 100%; height: 100%; }
+    #gameContainer canvas { display: block; }
+    .loader { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 24px; text-align: center; background: linear-gradient(145deg, #562b32, #30191e); transition: opacity .4s; }
+    .loader-title { color: #fff3ed; font-size: clamp(28px, 5vw, 46px); font-weight: 700; letter-spacing: .035em; text-shadow: 0 2px 14px rgba(0,0,0,.3); }
+    .bar { width: min(320px, 70%); height: 6px; border-radius: 3px; background: rgba(255,255,255,.2); overflow: hidden; }
+    .bar div { width: 0; height: 100%; background: #e3ad8e; transition: width .2s; }
+    .loader p { max-width: 34rem; font-size: 13px; line-height: 1.55; color: #ead7d2; }
+    .loader.done { opacity: 0; pointer-events: none; }
+    .loader.error .bar { display: none; }
+    .loader.error p { color: #d2b9a7; }
+    .retry { display: none; color: #e8c7a9; border: 1px solid #795c47; border-radius: 4px; padding: 8px 13px; font: inherit; background: #25201c; cursor: pointer; }
+    .loader.error .retry { display: inline-block; }
+    .game-footer { height: 48px; padding: 0 8px; display: flex; align-items: center; justify-content: flex-end; }
+    .fullscreen { background: none; border: 0; color: #888; cursor: pointer; padding: 8px; border-radius: 4px; display: flex; transition: color .15s, background-color .15s; }
+    .fullscreen:hover { color: #b08462; background: rgba(255,255,255,.05); }
+    .fullscreen:focus-visible, .retry:focus-visible { outline: 2px solid #d3a77e; outline-offset: 2px; }
+    @media (max-width: 520px) { .stage { padding: 8px; } .game { width: calc(100vw - 16px); } .game-footer { height: 42px; } }
+  </style>
+  <script src="Build/UnityLoader.js"></script>
+  <script src="TemplateData/split-data.js"></script>
+<meta property="og:type" content="website">
+		<meta property="og:url" content="https://rr2017copy-8tnerevy.manus.space/">
+		<meta property="og:title" content="Barkquiem">
+		<meta property="og:description" content="An independently hosted browser copy of the January 2017 Rec Room build.">
+		<meta name="twitter:card" content="summary_large_image">
+		<meta name="twitter:title" content="Barkquiem">
+		<meta name="twitter:description" content="An independently hosted browser copy of the January 2017 Rec Room build."><link rel="canonical" href="index.html" /><link rel="manifest" href="__manus/pwa/manifest.webmanifest" crossorigin="use-credentials" /></head>
+<body>
+  <main class="stage">
+      <section class="game" aria-label="Barkquiem browser game">
+        <div class="game-view">
+          <div id="gameContainer"></div>
+          <div class="loader" id="loader" role="status" aria-live="polite">
+          <h1 class="loader-title">Barkquiem</h1>
+          <div class="bar" aria-hidden="true"><div id="bar"></div></div>
+          <p id="loaderText">Loading Barkquiem… 0%</p>
+          <button class="retry" id="retry" type="button" onclick="window.location.reload()">Reload and try again</button>
+        </div>
+      </div>
+      <div class="game-footer">
+        <button class="fullscreen" title="Fullscreen" aria-label="Fullscreen" onclick="if (window.gameInstance) gameInstance.SetFullscreen(1)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+        </button>
+      </div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var loader = document.getElementById('loader');
+      var bar = document.getElementById('bar');
+      var text = document.getElementById('loaderText');
+      function showError(message) {
+        loader.className = 'loader error';
+        text.textContent = message;
+      }
+      window.showGameError = showError;
+      var testCanvas = document.createElement('canvas');
+      var gl2 = null;
+      try { gl2 = testCanvas.getContext('webgl2'); } catch (e) {}
+      if (!gl2) {
+        showError('This browser or device does not provide WebGL 2. Try an up-to-date Chrome browser with hardware acceleration enabled.');
+        return;
+      }
+      var lose = gl2.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+      try {
+        window.gameInstance = UnityLoader.instantiate('gameContainer', 'Build/public-barkquiem.json', {
+          onProgress: function (instance, progress) {
+            bar.style.width = (100 * progress) + '%';
+            text.textContent = progress < 1 ? 'Loading Barkquiem… ' + Math.floor(100 * progress) + '%' : 'Starting Barkquiem…';
+            if (progress === 1) setTimeout(function () {
+              loader.className = 'loader done';
+            }, 500);
+          }
+        });
+      } catch (e) {
+        showError('The game could not start in this browser. Check WebGL support and reload.');
+        console.error(e);
+      }
+      window.addEventListener('error', function () {
+        if (loader.className.indexOf('done') === -1 && loader.className.indexOf('error') === -1) {
+          showError('The browser game encountered a loading error. Check your connection and reload.');
+        }
+      });
+    })();
+  </script>
+<manus-content-root></manus-content-root><script>
+			var __manus_space_editor_info = {
+			spaceId : '8TNerevYEgnFqzcBLopMiQ',
+			patchList : [],
+			hideBadge : false,
+			sessionId : '38J77EwHpExqoai7LXpsws',
+			isWebDev : true,
+			usageStatus : 'UsageStatus_Unknown',
+			};
+			var __manus__global_env = {
+				apiHost: 'https://api.manus.im',
+				host: 'https://manus.im',
+				amplitudeKey: '46ac3f9abb41dd2d17a5785e052bc6d3',
+			};
+			</script><script src="https://files.manuscdn.com/manus-space-dispatcher/spaceEditor-Be_SD1Uu.js" async></script><script
+			defer
+			data-domain="manus.space"
+			src="https://plausible.io/js/script.file-downloads.hash.outbound-links.pageview-props.revenue.tagged-events.js"
+		></script>
+		<script>
+			window.plausible =
+				window.plausible ||
+				function () {
+					(window.plausible.q = window.plausible.q || []).push(arguments);
+				};
+			plausible('custom-pageview', {
+			  props: {
+    			domain: window.location.host
+  			}
+			})
+		</script><script defer nonce="8b52d8b3-23d9-43eb-943a-9c4011505f8d" src="https://manus-analytics.com/script.js" data-website-id="f05e9f4b-5be6-4745-8837-de03e8274bac"></script></body>
+</html>
